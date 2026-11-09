@@ -8,7 +8,7 @@ from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn import Config, Server
 
-from .inference import infer_text_api
+from inference import infer_text_api
 
 PORT_API = 8008
 
@@ -72,7 +72,7 @@ def start_api_server(**kwargs):
     try:
         if server_instance is None:
             print("[sidecar] Starting API server...", flush=True)
-            config = Config(app, host="0.0.0.0", port=port, log_level="info")
+            config = Config(app, host="127.0.0.1", port=port, log_level="info")
             server_instance = Server(config)
             # Start the ASGI server
             asyncio.run(server_instance.serve())

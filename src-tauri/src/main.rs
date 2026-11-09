@@ -3,7 +3,12 @@
 
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, RunEvent};
+// The following two `use` items are only referenced in release builds.
+// `#[allow(unused_imports)]` silences the warning in debug builds without
+// changing the imports.
+#[allow(unused_imports)]
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+#[allow(unused_imports)]
 use tauri_plugin_shell::ShellExt;
 
 #[tauri::command]
@@ -15,54 +20,84 @@ fn toggle_fullscreen(window: tauri::Window) {
 
 // Helper function to spawn the sidecar and monitor its stdout/stderr
 fn spawn_and_monitor_sidecar(app_handle: tauri::AppHandle) -> Result<(), String> {
-    // Check if a sidecar process already exists
-    if let Some(state) = app_handle.try_state::<Arc<Mutex<Option<CommandChild>>>>() {
-        let child_process = state.lock().unwrap();
-        if child_process.is_some() {
-            // A sidecar is already running, do not spawn a new one
-            println!("[tauri] Sidecar is already running. Skipping spawn.");
-            return Ok(()); // Exit early since sidecar is already running
-        }
-    }
-    // Spawn sidecar
-    let sidecar_command = app_handle
-        .shell()
-        .sidecar("main")
-        .map_err(|e| e.to_string())?;
-    let (mut rx, child) = sidecar_command.spawn().map_err(|e| e.to_string())?;
-    // Store the child process in the app state
-    if let Some(state) = app_handle.try_state::<Arc<Mutex<Option<CommandChild>>>>() {
-        *state.lock().unwrap() = Some(child);
-    } else {
-        return Err("Failed to access app state".to_string());
+    // -----------------------------------------------------------------------
+    // DEBUG BUILD (`pnpm tauri dev`)
+    // -----------------------------------------------------------------------
+    // In development we run the Python backend manually in a separate terminal:
+    //
+    //     uv run python src/backends/main.py
+    //
+    // Tauri must NOT spawn or monitor a sidecar in this mode. Spawning a
+    // PyInstaller-packaged `.exe` on every dev build regenerates the binary,
+    // which makes Windows Defender (and other antivirus) hold a lock on the
+    // file and cause `PermissionDenied (os error 5)` on the next `cargo build`.
+    // Skipping the spawn in debug also means `pnpm build:sidecar-winos` is not
+    // required during development — faster and more predictable builds.
+    #[cfg(debug_assertions)]
+    {
+        let _ = &app_handle; // silence unused-variable warning in dev builds
+        println!(
+            "[tauri] Debug mode: sidecar is managed manually (uv run python src/backends/main.py). Skipping spawn."
+        );
+        return Ok(());
     }
 
-    // Spawn an async task to handle sidecar communication
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    println!("Sidecar stdout: {}", line);
-                    // Emit the line to the frontend
-                    app_handle
-                        .emit("sidecar-stdout", line.to_string())
-                        .expect("Failed to emit sidecar stdout event");
-                }
-                CommandEvent::Stderr(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    eprintln!("Sidecar stderr: {}", line);
-                    // Emit the error line to the frontend
-                    app_handle
-                        .emit("sidecar-stderr", line.to_string())
-                        .expect("Failed to emit sidecar stderr event");
-                }
-                _ => {}
+    // -----------------------------------------------------------------------
+    // RELEASE BUILD (`pnpm tauri build`)
+    // -----------------------------------------------------------------------
+    // Original spawn-and-monitor logic, executed only in release builds, when
+    // the PyInstaller binary is bundled and (ideally) code-signed.
+    #[cfg(not(debug_assertions))]
+    {
+        // Check if a sidecar process already exists
+        if let Some(state) = app_handle.try_state::<Arc<Mutex<Option<CommandChild>>>>() {
+            let child_process = state.lock().unwrap();
+            if child_process.is_some() {
+                // A sidecar is already running, do not spawn a new one
+                println!("[tauri] Sidecar is already running. Skipping spawn.");
+                return Ok(()); // Exit early since sidecar is already running
             }
         }
-    });
+        // Spawn sidecar
+        let sidecar_command = app_handle
+            .shell()
+            .sidecar("main")
+            .map_err(|e| e.to_string())?;
+        let (mut rx, child) = sidecar_command.spawn().map_err(|e| e.to_string())?;
+        // Store the child process in the app state
+        if let Some(state) = app_handle.try_state::<Arc<Mutex<Option<CommandChild>>>>() {
+            *state.lock().unwrap() = Some(child);
+        } else {
+            return Err("Failed to access app state".to_string());
+        }
 
-    Ok(())
+        // Spawn an async task to handle sidecar communication
+        tauri::async_runtime::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                match event {
+                    CommandEvent::Stdout(line_bytes) => {
+                        let line = String::from_utf8_lossy(&line_bytes);
+                        println!("Sidecar stdout: {}", line);
+                        // Emit the line to the frontend
+                        app_handle
+                            .emit("sidecar-stdout", line.to_string())
+                            .expect("Failed to emit sidecar stdout event");
+                    }
+                    CommandEvent::Stderr(line_bytes) => {
+                        let line = String::from_utf8_lossy(&line_bytes);
+                        eprintln!("Sidecar stderr: {}", line);
+                        // Emit the error line to the frontend
+                        app_handle
+                            .emit("sidecar-stderr", line.to_string())
+                            .expect("Failed to emit sidecar stderr event");
+                    }
+                    _ => {}
+                }
+            }
+        });
+
+        Ok(())
+    }
 }
 
 // Define a command to shutdown sidecar process
