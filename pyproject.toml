@@ -20,6 +20,12 @@ dependencies = [
     "uvicorn[standard]",
     "sse-starlette==1.6.5",
     "pyinstaller==5.13.0",
+    "sqlalchemy>=2.0.57",
+    "alembic>=1.16.5",
+    "python-docx>=1.2.0",
+    "pymupdf>=1.26.5",
+    "requests>=2.32.5",
+    "llama-cpp-python>=0.3.36",
 ]
 
 [project.optional-dependencies]

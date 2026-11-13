@@ -3,6 +3,7 @@ import signal
 import sys
 import asyncio
 import threading
+from contextlib import asynccontextmanager
 from typing import TypedDict
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,32 +11,49 @@ from uvicorn import Config, Server
 
 from inference import infer_text_api
 
+# Database layer
+from db.paths import get_db_path
+from db.session import Base, engine
+from db import models  # noqa: F401 — registers UserProfile on Base.metadata
+
+# API routers
+from api import profile_router, resume_router
+
 PORT_API = 8008
 
 server_instance = None  # Global reference to the Uvicorn server instance
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print(f"[sidecar] Database: {get_db_path()}", flush=True)
+    Base.metadata.create_all(bind=engine)
+    print("[sidecar] Database ready.", flush=True)
+    yield
+
+
 app = FastAPI(
     title="API server",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS settings
 origins = [
     "*",  # to whitelist any url, REMOVE THIS FOR PRODUCTION!!!
-    # "http://localhost:3000", # for dev
-    # "https://your-web-ui.com", # for prod
 ]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    # allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Register API routers
+app.include_router(profile_router)
+app.include_router(resume_router)
 
-# Tell client we are ready to accept requests.
-# This is a mock func, modify to your needs.
+
 @app.get("/v1/connect")
 def connect_to_api_server():
     print("[server] Connecting to server...", flush=True)
@@ -50,22 +68,30 @@ def connect_to_api_server():
     }
 
 
+@app.get("/v1/db-status")
+def db_status():
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    return {
+        "db_path": str(get_db_path()),
+        "tables": inspector.get_table_names(),
+    }
+
+
 class T_Query(TypedDict):
     prompt: str
 
 
-# Mock text inference endpoint, here for inspiration.
 @app.post("/v1/completions")
 def llm_completion(payload: T_Query = Body(...)):
     return infer_text_api.completions(payload)
 
 
-# Programmatically force shutdown this sidecar.
 def kill_process():
-    os.kill(os.getpid(), signal.SIGINT)  # This force closes this script.
+    os.kill(os.getpid(), signal.SIGINT)
 
 
-# Programmatically startup the api server
 def start_api_server(**kwargs):
     global server_instance
     port = kwargs.get("port", PORT_API)
@@ -74,7 +100,6 @@ def start_api_server(**kwargs):
             print("[sidecar] Starting API server...", flush=True)
             config = Config(app, host="127.0.0.1", port=port, log_level="info")
             server_instance = Server(config)
-            # Start the ASGI server
             asyncio.run(server_instance.serve())
         else:
             print(
@@ -85,14 +110,10 @@ def start_api_server(**kwargs):
         print(f"[sidecar] Error, failed to start API server {e}", flush=True)
 
 
-# Handle the stdin event loop. This can be used like a CLI.
 def stdin_loop():
     print("[sidecar] Waiting for commands...", flush=True)
     while True:
-        # Read input from stdin.
         user_input = sys.stdin.readline().strip()
-
-        # Check if the input matches one of the available functions
         match user_input:
             case "sidecar shutdown":
                 print("[sidecar] Received 'sidecar shutdown' command.", flush=True)
@@ -103,23 +124,15 @@ def stdin_loop():
                 )
 
 
-# Start the input loop in a separate thread
 def start_input_thread():
     try:
         input_thread = threading.Thread(target=stdin_loop)
-        input_thread.daemon = True  # so it exits when the main program exits
+        input_thread.daemon = True
         input_thread.start()
     except:
         print("[sidecar] Failed to start input handler.", flush=True)
 
 
 if __name__ == "__main__":
-    # You can spawn sub-processes here before the main process.
-    # new_command = ["python", "-m", "some_script", "--arg", "argValue"]
-    # subprocess.Popen(new_command)
-
-    # Listen for stdin from parent process
     start_input_thread()
-
-    # Starts API server, blocks further code from execution.
     start_api_server()

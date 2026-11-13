@@ -396,3 +396,23 @@ Cargo.lock
 # python
 **/__pycache__
 **/.venv
+
+# ==========================================
+# Darth Apply - Específicos do Projeto
+# ==========================================
+
+# Modelos de IA (Nunca comitar, são muito grandes)
+models/
+*.gguf
+
+# Banco de dados local (SQLite)
+*.db
+*.db-journal
+*.sqlite
+
+# Binários gerados pelo PyInstaller (Sidecar)
+src-tauri/bin/
+
+# Arquivos gerados pelo Inno Setup
+Output/
+*.bin
