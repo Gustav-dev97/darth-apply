@@ -143,6 +143,11 @@ class EnhanceSummaryRequest(BaseModel):
     raw_summary: str = Field(..., min_length=10)
 
 
+class EnhanceDescriptionRequest(BaseModel):
+    raw_text: str = Field(..., min_length=5)
+    context_type: str = Field(..., description="'experience' ou 'project'")
+    context_title: Optional[str] = Field(None, description="Cargo ou Nome do Projeto")
+
 # --- Nested profile ----------------------------------------------------------
 
 

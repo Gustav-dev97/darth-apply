@@ -4,6 +4,7 @@ import {
   createProject,
   deleteProject,
   getProfile,
+  enhanceDescription, // NOVO IMPORT
   type Project,
   type ProjectInput,
 } from "../services/api";
@@ -11,6 +12,7 @@ import {
 const items = ref<Project[]>([]);
 const loading = ref(false);
 const saving = ref(false);
+const enhancing = ref(false); // NOVO ESTADO
 const error = ref<string | null>(null);
 const showForm = ref(false);
 
@@ -40,6 +42,24 @@ async function load() {
 function startAdd() {
   form.value = blank();
   showForm.value = true;
+}
+
+// NOVA FUNÇÃO DE IA
+async function improveDescription() {
+  if (!form.value.description?.trim()) return;
+  enhancing.value = true;
+  error.value = null;
+  try {
+    form.value.description = await enhanceDescription(
+      form.value.description,
+      "project",
+      form.value.name
+    );
+  } catch (e: any) {
+    error.value = e?.message ?? String(e);
+  } finally {
+    enhancing.value = false;
+  }
 }
 
 async function save() {
@@ -125,9 +145,15 @@ onMounted(load);
         </div>
       </div>
 
+      <!-- BOTÃO DE IA ADICIONADO AQUI -->
       <div class="field">
-        <label>Descrição (bullets)</label>
-        <textarea v-model="form.description" rows="4" placeholder="Uma linha por bullet. Ex: Desenvolvimento de experiência web 3D usando Three.js e WebGL."></textarea>
+        <div class="label-row">
+          <label>Descrição (bullets)</label>
+          <button type="button" class="btn-ai" @click="improveDescription" :disabled="enhancing">
+            {{ enhancing ? 'Gerando...' : '✨ Melhorar com IA' }}
+          </button>
+        </div>
+        <textarea v-model="form.description" rows="5" placeholder="Uma linha por bullet. Ou escreva livremente e a IA organiza."></textarea>
       </div>
 
       <div class="actions">
@@ -160,4 +186,20 @@ onMounted(load);
 .actions button.ghost { background: transparent; color: #333; border: 1px solid #ccc; }
 .msg.error { color: #b00020; font-size: 0.9rem; }
 .empty { color: #888; font-style: italic; }
+
+/* ESTILOS DO BOTÃO DE IA */
+.label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+.btn-ai {
+  background: linear-gradient(135deg, #7a1fa2, #b219c9);
+  color: #fff;
+  border: 0;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.btn-ai:hover:not(:disabled) { transform: scale(1.05); }
+.btn-ai:disabled { opacity: 0.6; cursor: wait; }
 </style>

@@ -5,6 +5,7 @@ import {
   deleteExperience,
   getProfile,
   updateExperience,
+  enhanceDescription, // NOVO IMPORT
   type Experience,
   type ExperienceInput,
 } from "../services/api";
@@ -12,6 +13,7 @@ import {
 const items = ref<Experience[]>([]);
 const loading = ref(false);
 const saving = ref(false);
+const enhancing = ref(false); // NOVO ESTADO
 const error = ref<string | null>(null);
 const editingId = ref<number | null>(null);
 
@@ -61,6 +63,24 @@ function startEdit(exp: Experience) {
 function cancel() {
   editingId.value = null;
   error.value = null;
+}
+
+// NOVA FUNÇÃO DE IA
+async function improveDescription() {
+  if (!form.value.description?.trim()) return;
+  enhancing.value = true;
+  error.value = null;
+  try {
+    form.value.description = await enhanceDescription(
+      form.value.description,
+      "experience",
+      form.value.role
+    );
+  } catch (e: any) {
+    error.value = e?.message ?? String(e);
+  } finally {
+    enhancing.value = false;
+  }
 }
 
 async function save() {
@@ -168,9 +188,15 @@ onMounted(load);
         Trabalho atual
       </label>
 
+      <!-- BOTÃO DE IA ADICIONADO AQUI -->
       <div class="field">
-        <label>Descrição</label>
-        <textarea v-model="form.description" rows="4"></textarea>
+        <div class="label-row">
+          <label>Descrição</label>
+          <button type="button" class="btn-ai" @click="improveDescription" :disabled="enhancing">
+            {{ enhancing ? 'Gerando...' : '✨ Melhorar com IA (STAR)' }}
+          </button>
+        </div>
+        <textarea v-model="form.description" rows="5" placeholder="Descreva o que você fez. A IA vai aplicar o método STAR."></textarea>
       </div>
 
       <div class="actions">
@@ -184,127 +210,43 @@ onMounted(load);
 </template>
 
 <style scoped>
-.section {
-  padding: 0.5rem 0;
-}
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.section-header h2 {
-  margin: 0 0 0.75rem;
-}
-.btn-add {
-  background: #7a1fa2;
+.section { padding: 0.5rem 0; }
+.section-header { display: flex; justify-content: space-between; align-items: center; }
+.section-header h2 { margin: 0 0 0.75rem; }
+.btn-add { background: #7a1fa2; color: #fff; border: 0; padding: 0.4rem 0.9rem; border-radius: 4px; cursor: pointer; }
+.list { list-style: none; padding: 0; margin: 0 0 1rem; }
+.card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; gap: 1rem; }
+.card-body { flex: 1; }
+.dates { font-size: 0.85rem; color: #555; margin: 0.15rem 0; }
+.desc { font-size: 0.9rem; margin: 0.4rem 0 0; white-space: pre-wrap; }
+.card-actions button { background: transparent; border: 1px solid #ccc; padding: 0.25rem 0.6rem; border-radius: 4px; margin-left: 0.35rem; cursor: pointer; font-size: 0.85rem; }
+.card-actions button.danger { color: #b00020; border-color: #b00020; }
+.form { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem; }
+.field { display: flex; flex-direction: column; margin-bottom: 0.75rem; flex: 1; }
+.field label { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.2rem; }
+.field input, .field textarea { padding: 0.45rem; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 0.9rem; }
+.field input:disabled { background: #f0f0f0; color: #888; }
+.row { display: flex; gap: 0.75rem; }
+.check { display: block; margin: 0.25rem 0 0.75rem; font-size: 0.9rem; }
+.actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.actions button { background: #1f1f1f; color: #fff; border: 0; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+.actions button.ghost { background: transparent; color: #333; border: 1px solid #ccc; }
+.msg.error { color: #b00020; font-size: 0.9rem; }
+.empty { color: #888; font-style: italic; }
+
+/* ESTILOS DO BOTÃO DE IA */
+.label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+.btn-ai {
+  background: linear-gradient(135deg, #7a1fa2, #b219c9);
   color: #fff;
   border: 0;
-  padding: 0.4rem 0.9rem;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 1rem;
-}
-.card {
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.card-body {
-  flex: 1;
-}
-.dates {
-  font-size: 0.85rem;
-  color: #555;
-  margin: 0.15rem 0;
-}
-.desc {
-  font-size: 0.9rem;
-  margin: 0.4rem 0 0;
-  white-space: pre-wrap;
-}
-.card-actions button {
-  background: transparent;
-  border: 1px solid #ccc;
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  margin-left: 0.35rem;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-.card-actions button.danger {
-  color: #b00020;
-  border-color: #b00020;
-}
-.form {
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  padding: 1rem;
-}
-.field {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0.75rem;
-  flex: 1;
-}
-.field label {
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
   font-size: 0.8rem;
   font-weight: 600;
-  margin-bottom: 0.2rem;
-}
-.field input,
-.field textarea {
-  padding: 0.45rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-family: inherit;
-  font-size: 0.9rem;
-}
-.field input:disabled {
-  background: #f0f0f0;
-  color: #888;
-}
-.row {
-  display: flex;
-  gap: 0.75rem;
-}
-.check {
-  display: block;
-  margin: 0.25rem 0 0.75rem;
-  font-size: 0.9rem;
-}
-.actions {
-  display: flex;
-  gap: 0.5rem;
-}
-.actions button {
-  background: #1f1f1f;
-  color: #fff;
-  border: 0;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
   cursor: pointer;
+  transition: transform 0.1s;
 }
-.actions button.ghost {
-  background: transparent;
-  color: #333;
-  border: 1px solid #ccc;
-}
-.msg.error {
-  color: #b00020;
-  font-size: 0.9rem;
-}
-.empty {
-  color: #888;
-  font-style: italic;
-}
+.btn-ai:hover:not(:disabled) { transform: scale(1.05); }
+.btn-ai:disabled { opacity: 0.6; cursor: wait; }
 </style>

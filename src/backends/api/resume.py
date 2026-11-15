@@ -20,10 +20,12 @@ from resume_engine.ats_checker import check_resume_docx, check_resume_pdf
 
 from .schemas import EnhanceSummaryRequest
 from .llm_manager import get_llm
+from .schemas import EnhanceSummaryRequest, EnhanceDescriptionRequest
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
 
 DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
 
 def _require_profile(db: Session) -> UserProfile:
     profile = (
@@ -40,6 +42,7 @@ def _require_profile(db: Session) -> UserProfile:
     if not profile:
         raise HTTPException(404, "Profile not created yet")
     return profile
+
 
 def _clean_output(text: str) -> str:
     """Remove vícios de terceira pessoa e limpa formatação."""
@@ -62,11 +65,12 @@ def _clean_output(text: str) -> str:
         text = re.sub(pattern, replacement, text)
 
     # Remove bullets vazios e ajusta quebras de linha
-    text = re.sub(r'(?m)^•\s*$\n?', '', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    text = re.sub(r'\n+•', '\n•', text)
-    
+    text = re.sub(r"(?m)^•\s*$\n?", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"\n+•", "\n•", text)
+
     return text.strip()
+
 
 @router.post("/enhance-summary")
 def enhance_summary(payload: EnhanceSummaryRequest):
@@ -91,7 +95,7 @@ def enhance_summary(payload: EnhanceSummaryRequest):
         "- objetivo: [o que busca no momento]\n\n"
         "Se uma categoria não for mencionada, retorne uma lista vazia [].\n"
         "ATENÇÃO: Mantenha as siglas EXATAMENTE como estão no texto original.\n\n"
-        f"Texto do Candidato:\n\"{payload.raw_summary}\""
+        f'Texto do Candidato:\n"{payload.raw_summary}"'
     )
 
     try:
@@ -100,14 +104,14 @@ def enhance_summary(payload: EnhanceSummaryRequest):
             temperature=0.0,
             max_tokens=500,
         )
-        raw_json_text = extract_output['choices'][0]['message']['content'].strip()
+        raw_json_text = extract_output["choices"][0]["message"]["content"].strip()
 
-        match = re.search(r'\{.*\}', raw_json_text, re.DOTALL)
+        match = re.search(r"\{.*\}", raw_json_text, re.DOTALL)
         if match:
             facts = json.loads(match.group(0))
         else:
             raise ValueError("Nenhum JSON encontrado na resposta da IA.")
-            
+
     except Exception as e:
         print(f"[AVISO] Falha na extração JSON: {e}. Usando fallback.", flush=True)
         facts = {"raw_text": payload.raw_summary}
@@ -150,21 +154,115 @@ def enhance_summary(payload: EnhanceSummaryRequest):
     try:
         gen_output = llm.create_chat_completion(
             messages=[{"role": "user", "content": generation_prompt}],
-            temperature=0.4, # Aumentado para 0.4 para dar criatividade ao Gemma
-            max_tokens=1000, # Aumentado para caber textos longos
+            temperature=0.4,  # Aumentado para 0.4 para dar criatividade ao Gemma
+            max_tokens=1000,  # Aumentado para caber textos longos
             repeat_penalty=1.1,
         )
-        
-        enhanced = gen_output['choices'][0]['message']['content'].strip()
-        enhanced = enhanced.replace("<end_of_turn>", "").replace("<start_of_turn>", "").replace("```", "").strip()
-        
+
+        enhanced = gen_output["choices"][0]["message"]["content"].strip()
+        enhanced = (
+            enhanced.replace("<end_of_turn>", "")
+            .replace("<start_of_turn>", "")
+            .replace("```", "")
+            .strip()
+        )
+
         enhanced = _clean_output(enhanced)
-        
+
         return {"enhanced_summary": enhanced}
 
     except Exception as e:
         raise HTTPException(500, detail=f"Erro na geração: {str(e)}")
 
+
+@router.post("/enhance-description")
+def enhance_description(payload: EnhanceDescriptionRequest):
+    llm = get_llm()
+    if llm is None:
+        raise HTTPException(503, "Modelo de IA local não encontrado.")
+
+    if payload.context_type == "experience":
+        system_instructions = (
+            "Você é um especialista em currículos ATS. Sua tarefa é transformar o texto informal do candidato "
+            "em uma descrição profissional de experiência utilizando o método STAR (Situação, Tarefa, Ação, Resultado).\n"
+            "REGRAS:\n"
+            "1. NÃO INVENTE dados, empresas ou tecnologias. Se o usuário não deu métricas numéricas (ex: 'aumentei em 20%'), NÃO invente números. Foque no impacto qualitativo.\n"
+            "2. Formate a saída como uma lista de 3 a 4 bullets (usando '•').\n"
+            "3. Cada bullet deve cobrir uma parte do STAR: Contexto/Cargo, Responsabilidades, Ações práticas e Resultados.\n"
+            "4. Use verbos de ação fortes no início de cada bullet (ex: 'Desenvolvi', 'Implementei', 'Otimizei').\n"
+            "5. NUNCA use pronomes ('eu', 'ele'). Use linguagem impessoal ('Responsável por...', 'Desenvolvimento de...').\n\n"
+            "EXEMPLO DE ENTRADA:\n"
+            "Trabalhei como dev junior na empresa X. Eu fazia api em python e banco de dados. Ajudei a equipe a entregar o projeto mais rapido.\n\n"
+            "EXEMPLO DE SAÍDA:\n"
+            "• Atuação como Desenvolvedor Júnior na empresa X, integrando a equipe de desenvolvimento de software (Situação).\n"
+            "• Responsável pela criação e manutenção de APIs utilizando Python e integração com bancos de dados relacionais (Tarefa).\n"
+            "• Implementação de melhorias no código e otimização de processos, colaborando ativamente com a equipe para acelerar a entrega das demandas (Ação).\n"
+            "• Contribuição para a conclusão eficiente do projeto, garantindo a qualidade técnica e a agilidade nas entregas da equipe (Resultado).\n\n"
+        )
+    else:  # project
+        system_instructions = (
+            "Você é um especialista em currículos ATS. Sua tarefa é transformar o texto informal do candidato "
+            "em uma descrição profissional e técnica de projeto.\n"
+            "REGRAS:\n"
+            "1. NÃO INVENTE. Use apenas o que foi fornecido.\n"
+            "2. Formate a saída como uma lista de 3 a 4 bullets (usando '•').\n"
+            "3. Estruture os bullets focando em: O problema/objetivo do projeto, as tecnologias utilizadas, as ações de desenvolvimento e o resultado final.\n"
+            "4. Use linguagem impessoal (ex: 'Desenvolvimento de...', 'Implementação de...').\n\n"
+            "EXEMPLO DE ENTRADA:\n"
+            "Fiz um site de biblioteca com react e google books api. O usuario podia favoritar livros e ler online.\n\n"
+            "EXEMPLO DE SAÍDA:\n"
+            "• Desenvolvimento de uma aplicação web para gerenciamento de biblioteca virtual, com o objetivo de facilitar a busca e o acesso a livros (Objetivo).\n"
+            "• Utilização das tecnologias React para o front-end e integração com a Google Books API para a obtenção de dados dos livros (Tecnologias).\n"
+            "• Implementação de funcionalidades como sistema de favoritos e leitura online, garantindo uma experiência de usuário fluida e intuitiva (Ações).\n"
+            "• Entrega de uma plataforma funcional que permite aos usuários organizar suas leituras e acessar conteúdos de forma prática (Resultado).\n\n"
+        )
+
+    title_context = (
+        f" (Cargo/Projeto: {payload.context_title})" if payload.context_title else ""
+    )
+
+    prompt = (
+        f"{system_instructions}"
+        f"Agora, melhore a seguinte descrição{title_context}:\n"
+        f'Texto original: "{payload.raw_text}"'
+    )
+
+    try:
+        gen_output = llm.create_chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=600,
+            repeat_penalty=1.1,
+        )
+
+        enhanced = gen_output["choices"][0]["message"]["content"].strip()
+        enhanced = (
+            enhanced.replace("<end_of_turn>", "")
+            .replace("<start_of_turn>", "")
+            .replace("```", "")
+            .strip()
+        )
+
+        # ==========================================================
+        # SANITIZAÇÃO (Limpa rótulos e arruma os bullets)
+        # ==========================================================
+
+        # 1. Remove os rótulos entre parênteses e substitui o ponto final
+        labels_pattern = r"\s*\((?:Situação|Tarefa|Ação|Ações|Resultado|Objetivo|Tecnologias|Situation|Task|Action|Result|Technologies)\)\.?"
+        enhanced = re.sub(labels_pattern, ".", enhanced, flags=re.IGNORECASE)
+
+        # 2. Corrige bullets que vieram na mesma linha
+        enhanced = re.sub(r"([^\n])\s*•\s*", r"\1\n• ", enhanced)
+
+        # 3. Limpeza de espaços e quebras de linha
+        enhanced = re.sub(r"[ \t]+\n", "\n", enhanced)
+        enhanced = re.sub(r"\.{2,}", ".", enhanced)  # Evita pontos duplicados
+        enhanced = re.sub(r"\n{3,}", "\n\n", enhanced).strip()
+
+        return {"enhanced_text": enhanced}
+
+    except Exception as e:
+        raise HTTPException(500, detail=f"Erro na geração: {str(e)}")
 
 @router.post("/generate")
 def generate_resume(db: Session = Depends(get_db)):

@@ -271,3 +271,16 @@ export async function generateResume(): Promise<ResumeGenerateResult> {
 export function resumeDownloadUrl(fmt: "docx" | "pdf"): string {
   return `${API_BASE}/api/resume/download/${fmt}`;
 }
+
+export async function enhanceDescription(
+  raw_text: string,
+  context_type: "experience" | "project",
+  context_title?: string
+): Promise<string> {
+  const res = await _req<{ enhanced_text: string }>(`${API_BASE}/api/resume/enhance-description`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raw_text, context_type, context_title }),
+  });
+  return res.enhanced_text;
+}
