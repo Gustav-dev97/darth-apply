@@ -83,6 +83,21 @@ export interface ProjectInput {
   end_date?: string | null;
 }
 
+export interface Course {
+  id: number;
+  name: string;
+  institution: string | null;
+  completion_date: string | null;
+  description: string | null;
+}
+
+export interface CourseInput {
+  name: string;
+  institution?: string | null;
+  completion_date?: string | null;
+  description?: string | null;
+}
+
 export interface UserProfile {
   id: number;
   full_name: string;
@@ -99,6 +114,7 @@ export interface UserProfile {
   skills: Skill[];
   links: Link[];
   projects: Project[];
+  courses: Course[];
 }
 
 export interface UserProfileInput {
@@ -253,6 +269,20 @@ export async function deleteProject(id: number): Promise<void> {
   await _req<void>(`${API_BASE}/api/profile/projects/${id}`, { method: "DELETE" });
 }
 
+// --- Course ------------------------------------------------------------------
+
+export async function createCourse(input: CourseInput): Promise<Course> {
+  return _req<Course>(`${API_BASE}/api/profile/courses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteCourse(id: number): Promise<void> {
+  await _req<void>(`${API_BASE}/api/profile/courses/${id}`, { method: "DELETE" });
+}
+
 // --- Resume / AI -------------------------------------------------------------
 
 export async function enhanceSummary(raw_summary: string): Promise<string> {
@@ -274,7 +304,7 @@ export function resumeDownloadUrl(fmt: "docx" | "pdf"): string {
 
 export async function enhanceDescription(
   raw_text: string,
-  context_type: "experience" | "project",
+  context_type: "experience" | "project" | "course",
   context_title?: string
 ): Promise<string> {
   const res = await _req<{ enhanced_text: string }>(`${API_BASE}/api/resume/enhance-description`, {

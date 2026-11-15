@@ -2,7 +2,7 @@
 ORM models for Darth Apply.
 
 `user_profile` is the root entity. Its child collections (experiences,
-educations, skills, links, projects) cascade-delete when the profile is removed.
+educations, skills, links, projects, courses) cascade-delete when the profile is removed.
 """
 
 from datetime import date, datetime
@@ -57,6 +57,11 @@ class UserProfile(Base):
         back_populates="profile",
         cascade="all, delete-orphan",
         order_by="Project.start_date.desc()",
+    )
+    courses: Mapped[list["Course"]] = relationship(
+        back_populates="profile",
+        cascade="all, delete-orphan",
+        order_by="Course.completion_date.desc()",
     )
 
 
@@ -136,3 +141,20 @@ class Project(Base):
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     profile: Mapped["UserProfile"] = relationship(back_populates="projects")
+
+
+class Course(Base):
+    __tablename__ = "course"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("user_profile.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    institution: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # The description is stored for AI-based job matching but is NOT rendered
+    # in the generated resume DOCX/PDF (see builder.py).
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    profile: Mapped["UserProfile"] = relationship(back_populates="courses")

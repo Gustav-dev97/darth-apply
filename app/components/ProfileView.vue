@@ -3,18 +3,29 @@ import { ref } from "vue";
 import ProfileForm from "./ProfileForm.vue";
 import ExperienceList from "./ExperienceList.vue";
 import EducationList from "./EducationList.vue";
+import CourseList from "./CourseList.vue";
 import SkillList from "./SkillList.vue";
 import LinkList from "./LinkList.vue";
 import ProjectList from "./ProjectList.vue";
 import ResumeGenerator from "./ResumeGenerator.vue";
 
-type Tab = "personal" | "experience" | "education" | "projects" | "skills" | "links" | "resume";
+type Tab =
+  | "personal"
+  | "experience"
+  | "education"
+  | "courses"
+  | "projects"
+  | "skills"
+  | "links"
+  | "resume";
+
 const active = ref<Tab>("personal");
 
 const tabs: { key: Tab; label: string }[] = [
     { key: "personal", label: "Dados Pessoais" },
     { key: "experience", label: "Experiências" },
     { key: "education", label: "Formação" },
+    { key: "courses", label: "Cursos" },
     { key: "projects", label: "Projetos" },
     { key: "skills", label: "Habilidades" },
     { key: "links", label: "Links" },
@@ -33,6 +44,7 @@ const tabs: { key: Tab; label: string }[] = [
             <ProfileForm v-if="active === 'personal'" />
             <ExperienceList v-else-if="active === 'experience'" />
             <EducationList v-else-if="active === 'education'" />
+            <CourseList v-else-if="active === 'courses'" />
             <ProjectList v-else-if="active === 'projects'" />
             <SkillList v-else-if="active === 'skills'" />
             <LinkList v-else-if="active === 'links'" />

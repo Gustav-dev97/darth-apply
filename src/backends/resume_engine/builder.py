@@ -9,6 +9,8 @@ Design rules followed (per current ATS parsing best practices):
 - Bullets as literal "•" characters
 - Contact info in the body, not in a Word header
 - Supports projects (for users without formal experience)
+- Supports courses (rendered without descriptions; descriptions are
+  stored only for AI-based job matching)
 """
 
 from datetime import date
@@ -190,6 +192,19 @@ def build_resume(profile) -> Document:
                 for line in proj.description.split("\n"):
                     if line.strip():
                         _add_bullet(doc, line.strip())
+
+    # 6.5 Courses (Complementary Education)
+    # Only name, institution and completion date are rendered. The course
+    # description is intentionally omitted here — it is stored in the DB
+    # for AI-based job matching, not for the visible resume.
+    if profile.courses:
+        _add_section_header(doc, "Cursos Complementares")
+        for course in profile.courses:
+            date_str = _format_date(course.completion_date) if course.completion_date else ""
+            title = course.name
+            if course.institution:
+                title += f" | {course.institution}"
+            _add_title_line(doc, title, date_str)
 
     # 7. Skills
     if profile.skills:

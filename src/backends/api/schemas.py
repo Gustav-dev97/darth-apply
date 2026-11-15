@@ -136,6 +136,27 @@ class ProjectRead(ProjectBase):
         orm_mode = True
 
 
+# --- Course ------------------------------------------------------------------
+
+
+class CourseBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    institution: Optional[str] = Field(None, max_length=200)
+    completion_date: Optional[date] = None
+    description: Optional[str] = None
+
+
+class CourseCreate(CourseBase):
+    pass
+
+
+class CourseRead(CourseBase):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+
 # --- AI Requests -------------------------------------------------------------
 
 
@@ -145,8 +166,9 @@ class EnhanceSummaryRequest(BaseModel):
 
 class EnhanceDescriptionRequest(BaseModel):
     raw_text: str = Field(..., min_length=5)
-    context_type: str = Field(..., description="'experience' ou 'project'")
-    context_title: Optional[str] = Field(None, description="Cargo ou Nome do Projeto")
+    context_type: str = Field(..., description="'experience', 'project' ou 'course'")
+    context_title: Optional[str] = Field(None, description="Cargo, Nome do Projeto ou Nome do Curso")
+
 
 # --- Nested profile ----------------------------------------------------------
 
@@ -160,6 +182,7 @@ class UserProfileRead(UserProfileBase):
     skills: list[SkillRead] = []
     links: list[LinkRead] = []
     projects: list[ProjectRead] = []
+    courses: list[CourseRead] = []
 
     class Config:
         orm_mode = True

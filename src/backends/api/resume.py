@@ -18,9 +18,8 @@ from resume_engine import (
 )
 from resume_engine.ats_checker import check_resume_docx, check_resume_pdf
 
-from .schemas import EnhanceSummaryRequest
-from .llm_manager import get_llm
 from .schemas import EnhanceSummaryRequest, EnhanceDescriptionRequest
+from .llm_manager import get_llm
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
 
@@ -36,6 +35,7 @@ def _require_profile(db: Session) -> UserProfile:
             selectinload(UserProfile.skills),
             selectinload(UserProfile.links),
             selectinload(UserProfile.projects),
+            selectinload(UserProfile.courses),
         )
         .first()
     )
@@ -199,6 +199,22 @@ def enhance_description(payload: EnhanceDescriptionRequest):
             "• Implementação de melhorias no código e otimização de processos, colaborando ativamente com a equipe para acelerar a entrega das demandas (Ação).\n"
             "• Contribuição para a conclusão eficiente do projeto, garantindo a qualidade técnica e a agilidade nas entregas da equipe (Resultado).\n\n"
         )
+    elif payload.context_type == "course":
+        system_instructions = (
+            "Você é um especialista em currículos ATS. Sua tarefa é transformar o texto informal do candidato "
+            "em uma descrição técnica e detalhada do conteúdo do curso.\n"
+            "REGRAS:\n"
+            "1. NÃO INVENTE. Use apenas o que foi fornecido.\n"
+            "2. Formate a saída como uma lista de 2 a 3 bullets (usando '•').\n"
+            "3. Extraia as palavras-chave mais importantes (ferramentas, metodologias, conceitos).\n"
+            "4. Use linguagem impessoal (ex: 'Estudo de...', 'Desenvolvimento de...').\n\n"
+            "EXEMPLO DE ENTRADA:\n"
+            "Fiz um curso de python focado em dados, aprendi pandas e numpy e a fazer uns graficos.\n\n"
+            "EXEMPLO DE SAÍDA:\n"
+            "• Estudo aprofundado de Python voltado para a análise de dados.\n"
+            "• Desenvolvimento de habilidades práticas com as bibliotecas Pandas e NumPy para manipulação e tratamento de dados.\n"
+            "• Criação de visualizações gráficas para interpretação de métricas e resultados.\n\n"
+        )
     else:  # project
         system_instructions = (
             "Você é um especialista em currículos ATS. Sua tarefa é transformar o texto informal do candidato "
@@ -218,7 +234,7 @@ def enhance_description(payload: EnhanceDescriptionRequest):
         )
 
     title_context = (
-        f" (Cargo/Projeto: {payload.context_title})" if payload.context_title else ""
+        f" (Cargo/Projeto/Curso: {payload.context_title})" if payload.context_title else ""
     )
 
     prompt = (
@@ -263,6 +279,7 @@ def enhance_description(payload: EnhanceDescriptionRequest):
 
     except Exception as e:
         raise HTTPException(500, detail=f"Erro na geração: {str(e)}")
+
 
 @router.post("/generate")
 def generate_resume(db: Session = Depends(get_db)):
