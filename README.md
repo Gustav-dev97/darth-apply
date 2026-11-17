@@ -18,7 +18,7 @@
 </div>
 
 > [!WARNING]
-> **Status: early development.** Phase 0 (bootstrap) is complete: the Tauri desktop shell, the Vue 3 frontend and the FastAPI sidecar are operational in development mode. Features will be added incrementally.
+> **Status: active development.** Phases 0–2 are complete: the Tauri desktop shell, the Vue 3 frontend, the FastAPI sidecar, the local AI engine (Gemma 2 9B via `llama-cpp-python`), and the ATS-friendly resume generator (DOCX + PDF) are all operational. The Playwright automation layer will be added incrementally.
 
 ## Table of Contents
 
@@ -41,7 +41,8 @@ The name is a joke: if recruiters automate candidate selection, candidates shoul
 Core principles:
 
 - **Local-first.** Your profile, resumes, application history and browser sessions never leave your machine. No central server.
-- **Open source.** Code is auditable. You can see exactly what the app does.
+- **No external AI APIs.** The LLM runs entirely on your machine. No quotas, no costs, no outages.
+- **Fidelity to the candidate.** The AI reformulates what the user provided — it never invents experiences, companies, certifications or technologies.
 - **Assisted, not reckless.** Submitting applications requires explicit user approval. No spamming.
 - **AI is a tool, not an authority.** The user reviews everything the LLM generates before it is used.
 
@@ -52,9 +53,11 @@ Core principles:
 | Desktop shell | **Tauri 2** | Native window, tray, autostart, installer |
 | Frontend | **Vue 3 + TypeScript + Vite** | UI |
 | Backend | **Python 3.13 + FastAPI** | Core logic, orchestration, document processing |
+| AI (local) | **llama-cpp-python + Gemma 2 9B** | 100% offline LLM inference (GGUF, no API) |
+| Database | **SQLite + SQLAlchemy** | Local persistence |
+| Documents | **python-docx + LibreOffice headless** | ATS-friendly DOCX and PDF generation |
+| PDF parsing | **PyMuPDF** | ATS verification of generated files |
 | Automation | **Playwright** *(planned)* | Browser automation and form filling |
-| Database | **SQLite + SQLAlchemy** *(planned)* | Local persistence |
-| AI | **Ollama** *(planned, optional)* | Local LLM inference |
 
 ## Development
 
@@ -64,9 +67,12 @@ Core principles:
 - Rust (via rustup) with MSVC toolchain on Windows
 - Python 3.13 (pinned via `.python-version`, handled by `uv`)
 - `uv` for Python package management
+- LibreOffice (optional, required only for PDF export)
 
 ### First-time setup
 
 ```bash
 pnpm install-reqs
 pnpm build:icons
+uv venv
+uv pip install .
