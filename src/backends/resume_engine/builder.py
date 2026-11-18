@@ -111,11 +111,15 @@ def _add_section_header(doc: Document, title: str) -> None:
 
 
 def _add_bullet(doc: Document, text: str) -> None:
+    # Remove qualquer prefixo de bullet que já venha no texto (evita "• • texto")
+    cleaned = text.lstrip("•-*").strip()
+    if not cleaned:
+        return
     p = doc.add_paragraph()
     p.paragraph_format.left_indent = Inches(0.2)
     p.paragraph_format.space_after = Pt(3)
     p.add_run("• ").bold = True
-    p.add_run(text)
+    p.add_run(cleaned)
 
 
 def _add_title_line(doc: Document, bold_part: str, muted_part: str) -> None:
