@@ -12,8 +12,13 @@ export default defineConfig({
   server: {
     port: 3000,
     strictPort: true,
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost',
+      port: 3000,
+    },
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
+      // tell vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**", "**/dist/**", "**/tmp/**"],
     },
   },

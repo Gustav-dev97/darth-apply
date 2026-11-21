@@ -29,7 +29,12 @@ async def lifespan(app: FastAPI):
     print(f"[sidecar] Database: {get_db_path()}", flush=True)
     Base.metadata.create_all(bind=engine)
     print("[sidecar] Database ready.", flush=True)
-    yield
+    try:
+        yield
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Ocorre quando o Uvicorn --reload detecta uma alteração e reinicia
+        # o processo, ou quando o usuário envia Ctrl+C. Não é um erro.
+        print("[sidecar] Shutting down gracefully...", flush=True)
 
 
 app = FastAPI(

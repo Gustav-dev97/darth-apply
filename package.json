@@ -9,11 +9,10 @@
   "type": "module",
   "scripts": {
     "install-reqs": "pnpm install && uv pip install .",
+    "dev:backend": "nodemon --watch src/backends --ext py --signal SIGTERM --exec \"uv run uvicorn main:app --app-dir src/backends --host 127.0.0.1 --port 8008\"",
     "dev:frontend": "vite",
-    "dev:backend": "uv run python src/backends/main.py",
-    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
-    "tauri:build": "tauri build",
-    "dev:all": "concurrently \"uv run python src/backends/main.py\" \"pnpm dev:frontend\"",
+    "dev:tauri": "pnpm tauri dev",
+    "dev": "concurrently --kill-others-on-fail -n \"BACKEND,FRONTEND,TAURI\" -c \"blue,green,magenta\" \"pnpm dev:backend\" \"pnpm dev:frontend\" \"wait-on tcp:8008 http-get://localhost:3000 && pnpm dev:tauri\"",
     "build:sidecar-winos": "pyinstaller -c -F --clean --name main-x86_64-pc-windows-msvc --distpath src-tauri/bin/api src/backends/main.py",
     "build:sidecar-macos-x86_64": "pyinstaller -c -F --clean --name main-x86_64-apple-darwin --distpath src-tauri/bin/api src/backends/main.py",
     "build:sidecar-macos-aarch64": "pyinstaller -c -F --clean --name main-aarch64-apple-darwin --distpath src-tauri/bin/api src/backends/main.py",
@@ -29,7 +28,6 @@
     "@tauri-apps/plugin-http": "^2.4.3",
     "@tauri-apps/plugin-shell": "^2.2.1",
     "@types/node": "20.2.4",
-    "concurrently": "^8.2.2",
     "typescript": "5.0.4",
     "vue": "^3.5.13"
   },
@@ -37,6 +35,9 @@
     "@tauri-apps/cli": "^2.5.0",
     "@types/cors": "^2.8.17",
     "@vitejs/plugin-vue": "^5.2.2",
-    "vite": "^6.3.1"
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.14",
+    "vite": "^6.3.1",
+    "wait-on": "^9.5.1"
   }
 }
