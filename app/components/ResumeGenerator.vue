@@ -1,20 +1,36 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import {
     generateResume,
+    getResumeTemplates,
     resumeDownloadUrl,
     type ResumeGenerateResult,
+    type ResumeTemplate,
 } from "../services/api";
 
+const templates = ref<ResumeTemplate[]>([]);
+const selectedModel = ref<string>("");
 const generating = ref(false);
 const error = ref<string | null>(null);
 const result = ref<ResumeGenerateResult | null>(null);
 
+onMounted(async () => {
+    try {
+        templates.value = await getResumeTemplates();
+        if (templates.value.length > 0) {
+            selectedModel.value = templates.value[0].id;
+        }
+    } catch (e: any) {
+        error.value = e?.message ?? String(e);
+    }
+});
+
 async function generate() {
     generating.value = true;
     error.value = null;
+    result.value = null;
     try {
-        result.value = await generateResume();
+        result.value = await generateResume(selectedModel.value);
     } catch (e: any) {
         error.value = e?.message ?? String(e);
     } finally {
@@ -23,7 +39,8 @@ async function generate() {
 }
 
 function download(fmt: "docx" | "pdf") {
-    window.open(resumeDownloadUrl(fmt), "_blank");
+    if (!result.value) return;
+    window.open(resumeDownloadUrl(result.value.model_id, fmt), "_blank");
 }
 </script>
 
@@ -31,12 +48,20 @@ function download(fmt: "docx" | "pdf") {
     <div class="resume-gen">
         <h2>Gerar Currículo</h2>
         <p class="hint">
-            O currículo é montado a partir dos dados do perfil. Ele é gerado em uma
-            coluna, sem imagens, sem tabelas e com bullets em texto puro — formato
-            compatível com a maioria dos parsers ATS.
+            Escolha um modelo. O currículo é gerado em <strong>DOCX</strong> (editável,
+            ATS-friendly) e <strong>PDF</strong> (mesmo visual, pronto para envio).
         </p>
 
-        <button class="btn-generate" :disabled="generating" @click="generate">
+        <div class="field">
+            <label>Modelo</label>
+            <select v-model="selectedModel" :disabled="generating">
+                <option v-for="t in templates" :key="t.id" :value="t.id">
+                    {{ t.name }} — {{ t.description }}
+                </option>
+            </select>
+        </div>
+
+        <button class="btn-generate" :disabled="generating || !selectedModel" @click="generate">
             {{ generating ? "Gerando…" : "Gerar Currículo" }}
         </button>
 
@@ -60,10 +85,8 @@ function download(fmt: "docx" | "pdf") {
                 </div>
                 <button @click="download('pdf')">Baixar</button>
             </div>
-
             <div v-else class="warn">
-                PDF não gerado. Instale o LibreOffice para habilitar a conversão:
-                <code>winget install --id TheDocumentFoundation.LibreOffice</code>
+                PDF não gerado. Instale o LibreOffice para habilitar a conversão.
             </div>
 
             <h3>Verificação ATS</h3>
@@ -102,6 +125,7 @@ function download(fmt: "docx" | "pdf") {
 </template>
 
 <style scoped>
+/* ... (mantenha os mesmos estilos da versão anterior) ... */
 .resume-gen {
     max-width: 720px;
 }
@@ -109,6 +133,26 @@ function download(fmt: "docx" | "pdf") {
 .hint {
     color: #555;
     font-size: 0.9rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    margin: 0.75rem 0;
+}
+
+.field label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.field select {
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.95rem;
 }
 
 .btn-generate {
@@ -177,13 +221,6 @@ function download(fmt: "docx" | "pdf") {
     padding: 0.6rem 1rem;
     font-size: 0.9rem;
     margin-bottom: 0.5rem;
-}
-
-.warn code {
-    background: #f3f3f3;
-    padding: 0.1rem 0.3rem;
-    border-radius: 3px;
-    font-size: 0.85em;
 }
 
 .ats-block {

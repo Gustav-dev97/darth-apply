@@ -138,7 +138,14 @@ export interface AtsResult {
   checks: AtsCheck[];
 }
 
+export interface ResumeTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface ResumeGenerateResult {
+  model_id: string;
   docx_path: string;
   pdf_path: string | null;
   libreoffice_available: boolean;
@@ -294,12 +301,19 @@ export async function enhanceSummary(raw_summary: string): Promise<string> {
   return res.enhanced_summary;
 }
 
-export async function generateResume(): Promise<ResumeGenerateResult> {
-  return _req<ResumeGenerateResult>(`${API_BASE}/api/resume/generate`, { method: "POST" });
+export async function getResumeTemplates(): Promise<ResumeTemplate[]> {
+  return _req<ResumeTemplate[]>(`${API_BASE}/api/resume/templates`);
 }
 
-export function resumeDownloadUrl(fmt: "docx" | "pdf"): string {
-  return `${API_BASE}/api/resume/download/${fmt}`;
+export async function generateResume(model_id: string): Promise<ResumeGenerateResult> {
+  return _req<ResumeGenerateResult>(
+    `${API_BASE}/api/resume/generate?model_id=${encodeURIComponent(model_id)}`,
+    { method: "POST" }
+  );
+}
+
+export function resumeDownloadUrl(model_id: string, fmt: "docx" | "pdf"): string {
+  return `${API_BASE}/api/resume/download/${model_id}/${fmt}`;
 }
 
 export async function enhanceDescription(

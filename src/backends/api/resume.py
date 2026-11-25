@@ -17,6 +17,7 @@ from resume_engine import (
     get_resumes_dir,
 )
 from resume_engine.ats_checker import check_resume_docx, check_resume_pdf
+from resume_engine.models import list_models
 
 from .schemas import EnhanceSummaryRequest, EnhanceDescriptionRequest
 from .llm_manager import get_llm
@@ -64,7 +65,6 @@ def _clean_output(text: str) -> str:
     for pattern, replacement in replacements:
         text = re.sub(pattern, replacement, text)
 
-    # Remove bullets vazios e ajusta quebras de linha
     text = re.sub(r"(?m)^•\s*$\n?", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"\n+•", "\n•", text)
@@ -78,9 +78,6 @@ def enhance_summary(payload: EnhanceSummaryRequest):
     if llm is None:
         raise HTTPException(503, "Modelo de IA local não encontrado.")
 
-    # =========================================================================
-    # PASSO 1: EXTRAÇÃO DE FATOS (Formato Gemma: user only)
-    # =========================================================================
     extraction_prompt = (
         "Você é uma máquina de extração de dados. Leia o texto do candidato e extraia as informações "
         "em um objeto JSON.\n"
@@ -116,9 +113,6 @@ def enhance_summary(payload: EnhanceSummaryRequest):
         print(f"[AVISO] Falha na extração JSON: {e}. Usando fallback.", flush=True)
         facts = {"raw_text": payload.raw_summary}
 
-    # =========================================================================
-    # PASSO 2: GERAÇÃO DOS BULLETS (Foco em expandir o texto)
-    # =========================================================================
     generation_prompt = (
         "Você é um especialista em currículos ATS e otimização para a plataforma Gupy.\n"
         "Sua tarefa é escrever EXATAMENTE 4 bullets para o 'Resumo de Qualificações' usando as informações do JSON fornecido.\n\n"
@@ -154,8 +148,8 @@ def enhance_summary(payload: EnhanceSummaryRequest):
     try:
         gen_output = llm.create_chat_completion(
             messages=[{"role": "user", "content": generation_prompt}],
-            temperature=0.4,  # Aumentado para 0.4 para dar criatividade ao Gemma
-            max_tokens=1000,  # Aumentado para caber textos longos
+            temperature=0.4,
+            max_tokens=1000,
             repeat_penalty=1.1,
         )
 
@@ -215,7 +209,7 @@ def enhance_description(payload: EnhanceDescriptionRequest):
             "• Desenvolvimento de habilidades práticas com as bibliotecas Pandas e NumPy para manipulação e tratamento de dados.\n"
             "• Criação de visualizações gráficas para interpretação de métricas e resultados.\n\n"
         )
-    else:  # project
+    else:
         system_instructions = (
             "Você é um especialista em currículos ATS. Sua tarefa é transformar o texto informal do candidato "
             "em uma descrição profissional e técnica de projeto.\n"
@@ -234,7 +228,9 @@ def enhance_description(payload: EnhanceDescriptionRequest):
         )
 
     title_context = (
-        f" (Cargo/Projeto/Curso: {payload.context_title})" if payload.context_title else ""
+        f" (Cargo/Projeto/Curso: {payload.context_title})"
+        if payload.context_title
+        else ""
     )
 
     prompt = (
@@ -259,20 +255,13 @@ def enhance_description(payload: EnhanceDescriptionRequest):
             .strip()
         )
 
-        # ==========================================================
-        # SANITIZAÇÃO (Limpa rótulos e arruma os bullets)
-        # ==========================================================
-
-        # 1. Remove os rótulos entre parênteses e substitui o ponto final
         labels_pattern = r"\s*\((?:Situação|Tarefa|Ação|Ações|Resultado|Objetivo|Tecnologias|Situation|Task|Action|Result|Technologies)\)\.?"
         enhanced = re.sub(labels_pattern, ".", enhanced, flags=re.IGNORECASE)
 
-        # 2. Corrige bullets que vieram na mesma linha
         enhanced = re.sub(r"([^\n])\s*•\s*", r"\1\n• ", enhanced)
 
-        # 3. Limpeza de espaços e quebras de linha
         enhanced = re.sub(r"[ \t]+\n", "\n", enhanced)
-        enhanced = re.sub(r"\.{2,}", ".", enhanced)  # Evita pontos duplicados
+        enhanced = re.sub(r"\.{2,}", ".", enhanced)
         enhanced = re.sub(r"\n{3,}", "\n\n", enhanced).strip()
 
         return {"enhanced_text": enhanced}
@@ -281,23 +270,30 @@ def enhance_description(payload: EnhanceDescriptionRequest):
         raise HTTPException(500, detail=f"Erro na geração: {str(e)}")
 
 
+@router.get("/templates")
+def get_templates():
+    return list_models()
+
+
 @router.post("/generate")
-def generate_resume(db: Session = Depends(get_db)):
+def generate_resume(model_id: str = "classico", db: Session = Depends(get_db)):
     profile = _require_profile(db)
     resumes_dir = get_resumes_dir()
 
-    docx_path = resumes_dir / "curriculo.docx"
-    doc = build_resume(profile)
+    # 1. Gera o DOCX
+    docx_path = resumes_dir / f"curriculo-{model_id}.docx"
+    doc = build_resume(profile, model_id=model_id)
     doc.save(str(docx_path))
 
+    # 2. Converte o MESMO DOCX para PDF (garante visual idêntico)
     pdf_path = convert_docx_to_pdf(docx_path, resumes_dir)
 
+    # 3. ATS checks
     docx_ats = check_resume_docx(docx_path, profile)
-    pdf_ats = None
-    if pdf_path is not None:
-        pdf_ats = check_resume_pdf(pdf_path, profile)
+    pdf_ats = check_resume_pdf(pdf_path, profile) if pdf_path else None
 
     return {
+        "model_id": model_id,
         "docx_path": str(docx_path),
         "pdf_path": str(pdf_path) if pdf_path else None,
         "libreoffice_available": find_libreoffice() is not None,
@@ -306,14 +302,14 @@ def generate_resume(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/download/{fmt}")
-def download_resume(fmt: str):
+@router.get("/download/{model_id}/{fmt}")
+def download_resume(model_id: str, fmt: str):
     if fmt not in ("docx", "pdf"):
         raise HTTPException(400, "format must be 'docx' or 'pdf'")
 
-    path = get_resumes_dir() / f"curriculo.{fmt}"
+    path = get_resumes_dir() / f"curriculo-{model_id}.{fmt}"
     if not path.exists():
         raise HTTPException(404, "Resume has not been generated yet")
 
     media = DOCX_MEDIA if fmt == "docx" else "application/pdf"
-    return FileResponse(path, filename=f"curriculo.{fmt}", media_type=media)
+    return FileResponse(path, filename=f"curriculo-{model_id}.{fmt}", media_type=media)
